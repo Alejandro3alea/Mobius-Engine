@@ -1,0 +1,86 @@
+#version 460
+
+#define GROUP_SIZE         8
+#define GROUP_THREAD_COUNT (GROUP_SIZE * GROUP_SIZE)
+#define FILTER_SIZE        3
+#define FILTER_RADIUS      (FILTER_SIZE / 2)
+#define TILE_SIZE          (GROUP_SIZE + 2 * FILTER_RADIUS)
+#define TILE_PIXEL_COUNT   (TILE_SIZE * TILE_SIZE)
+
+// ------------------- UNIFORM ------------------
+layout(binding = 0)			 uniform sampler2D uInputTex;
+layout(rgba32f, binding = 0) uniform image2D   uOutputTex;
+
+layout(binding = 1)			 uniform sampler2D uDirtTex;
+
+uniform vec2  uTexelSize;
+uniform int   uMipLevel;
+uniform float uBloomIntensity;
+uniform float uDirtIntensity;
+
+// ------------------- SHARED -------------------
+shared float pixels_r[TILE_PIXEL_COUNT];
+shared float pixels_g[TILE_PIXEL_COUNT];
+shared float pixels_b[TILE_PIXEL_COUNT];
+
+
+void SetPixel(int idx, vec3 c)
+{
+    pixels_r[idx] = c.r;
+    pixels_g[idx] = c.g;
+    pixels_b[idx] = c.b;
+}
+
+vec3 GetPixel(uint idx)
+{
+    return vec3(pixels_r[idx], pixels_g[idx], pixels_b[idx]);
+}
+
+ // Based on "Next-generation post-processing in Call of Duty: Advanced Warfare": http://goo.gl/eomGso
+layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE) in;
+void main()
+{
+    vec2  baseIdx   = ivec2(gl_WorkGroupID) * GROUP_SIZE - FILTER_RADIUS;
+
+    for (int i = int(gl_LocalInvocationIndex); i < TILE_PIXEL_COUNT; i += GROUP_THREAD_COUNT)
+    {
+        vec2 uv        = (baseIdx + 0.5) * uTexelSize;
+        vec2 uvOffset = vec2(i % TILE_SIZE, i / TILE_SIZE) * uTexelSize;
+        vec3 color = textureLod(uInputTex, (uv + uvOffset), uMipLevel).rgb;
+        SetPixel(i, color);
+    }
+
+    memoryBarrierShared();
+    barrier();
+
+    // Center texel
+    uint pixelIdx = (gl_LocalInvocationID.x + FILTER_RADIUS) + (gl_LocalInvocationID.y + FILTER_RADIUS) * TILE_SIZE;
+
+    vec3 totalSum = vec3(0.0);
+    totalSum =  GetPixel(pixelIdx - TILE_SIZE - 1);
+    totalSum += GetPixel(pixelIdx - TILE_SIZE    ) * 2.0;
+    totalSum += GetPixel(pixelIdx - TILE_SIZE + 1);
+	
+    totalSum += GetPixel(pixelIdx - 1) * 2.0;
+    totalSum += GetPixel(pixelIdx    ) * 4.0;
+    totalSum += GetPixel(pixelIdx + 1) * 2.0;
+	
+    totalSum += GetPixel(pixelIdx + TILE_SIZE - 1);
+    totalSum += GetPixel(pixelIdx + TILE_SIZE    ) * 2.0;
+    totalSum += GetPixel(pixelIdx + TILE_SIZE + 1);
+
+    vec3 bloom = totalSum * uBloomIntensity / 16.0;
+    
+	ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+	vec3 finalColor = imageLoad(uOutputTex, pixelCoords).rgb + bloom;
+
+    if (uMipLevel == 1)
+    {
+        vec2 uv  = (vec2(pixelCoords) + vec2(0.5, 0.5)) * uTexelSize;
+        finalColor += texture(uDirtTex, uv).rgb * uDirtIntensity * bloom * uBloomIntensity;
+        finalColor = finalColor / (finalColor + vec3(1.0));
+        finalColor = pow(finalColor, vec3(1.0/2.2));
+    }
+
+	imageStore(uOutputTex, pixelCoords, vec4(finalColor, 1.0));
+}

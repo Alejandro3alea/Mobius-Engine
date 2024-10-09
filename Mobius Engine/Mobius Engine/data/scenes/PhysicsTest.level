@@ -1,0 +1,27 @@
+{
+    "LevelName": "temp",
+    "Path": "temp.json",
+    "Root": [
+        {
+            ".Name": "Unnamed (0)",
+            "Comps": [
+                {
+                    ".Rtti": "ModelRenderer"
+                }
+            ],
+            "transform": {
+                "pos": {
+                    "x": 0.0,
+                    "y": 2.1722946166992188,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.9592786431312561,
+                    "y": 0.07869372516870499,
+                    "z": 1.909999966621399
+                }
+            }
+        }
+    ],
+    "Skybox": "data/skybox/Airport.hdr"
+}

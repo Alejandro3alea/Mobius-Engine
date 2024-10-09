@@ -1,0 +1,86 @@
+#pragma once
+#include "Serialization.h"
+#include "PhysicsMgr.h"
+
+#include <glm.hpp>
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+struct Collider : public Serializable
+{
+	virtual PxGeometry* GetGeometry() = 0;
+	virtual void GenerateGeometry() = 0;
+	virtual bool OnGui() = 0;
+};
+
+template <typename T>
+struct TCollider : public Collider
+{
+	virtual PxGeometry* GetGeometry() override { return dynamic_cast<PxGeometry*>(mGeometry); }
+	void ReleaseGeometry() { delete mGeometry;	mGeometry = nullptr; }
+
+public:
+	T* mGeometry = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+struct SphereCollider : public TCollider<PxSphereGeometry>
+{
+	SphereCollider(const float Radius);
+
+	virtual void GenerateGeometry() override;
+	virtual bool OnGui() override;
+
+	virtual void FromJson(json& Val) override;
+	virtual json& ToJson(json& Val) override;
+};
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+struct BoxCollider : public TCollider<PxBoxGeometry>
+{
+	BoxCollider(glm::vec3 Size);
+
+	virtual void GenerateGeometry() override;
+	virtual bool OnGui() override;
+
+	virtual void FromJson(json& Val) override;
+	virtual json& ToJson(json& Val) override;
+};
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+/*struct PlaneCollider : public TCollider<PxPlaneGeometry>
+{
+	
+
+	virtual void GenerateGeometry() override;
+	virtual bool OnGui() override;
+};
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+struct CapsuleCollider : public TCollider<PxCapsuleGeometry>
+{
+
+};
+
+//////////////////////////////////////////////////////////////////////////
+//
+//////////////////////////////////////////////////////////////////////////
+
+struct MeshCollider : public TCollider<PxTriangleMesh>
+{
+
+};*/

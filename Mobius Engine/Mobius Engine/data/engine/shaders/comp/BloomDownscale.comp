@@ -1,0 +1,108 @@
+#version 460
+
+#define EPSILON 0.0001
+
+#define GROUP_SIZE         8
+#define GROUP_THREAD_COUNT (GROUP_SIZE * GROUP_SIZE)
+#define FILTER_SIZE        3
+#define FILTER_RADIUS      (FILTER_SIZE / 2)
+#define TILE_SIZE          (GROUP_SIZE + 2 * FILTER_RADIUS)
+#define TILE_PIXEL_COUNT   (TILE_SIZE * TILE_SIZE)
+
+// ------------------- UNIFORM ------------------
+layout(binding = 0)			 uniform sampler2D uInputTex;
+layout(rgba32f, binding = 0) uniform writeonly image2D uOutputTex;
+
+uniform vec4  uThreshold;
+uniform vec2  uTexelSize;
+uniform int   uMipLevel;
+uniform bool  uUseThreshold;
+
+// ------------------- SHARED -------------------
+shared float pixels_r[TILE_PIXEL_COUNT];
+shared float pixels_g[TILE_PIXEL_COUNT];
+shared float pixels_b[TILE_PIXEL_COUNT];
+
+
+vec3 QuadraticThreshold(vec3 color, float threshold, vec3 curve)
+{
+    float pixelBrightness = max(color.r, max(color.g, color.b));
+    float rq = clamp(pixelBrightness - curve.x, 0.0, curve.y);
+    rq = curve.z * rq * rq;
+
+    color *= max(rq, pixelBrightness - threshold) / max(pixelBrightness, EPSILON);
+    return color;
+}
+
+float Luma(vec3 c)
+{
+    return dot(c, vec3(0.2126729, 0.7151522, 0.0721750));
+}
+
+// [Karis2013] proposed reducing the dynamic range before averaging
+vec3 KarisAverage(vec3 c)
+{
+    return c / (1.0 + Luma(c.rgb) + EPSILON);
+}
+
+void SetPixel(int idx, vec3 c)
+{
+    pixels_r[idx] = c.r;
+    pixels_g[idx] = c.g;
+    pixels_b[idx] = c.b;
+}
+
+vec3 GetPixel(uint idx)
+{
+    return vec3(pixels_r[idx], pixels_g[idx], pixels_b[idx]);
+}
+
+ // Based on "Next-generation post-processing in Call of Duty: Advanced Warfare": http://goo.gl/eomGso
+layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE) in;
+void main()
+{
+    ivec2 baseIdx   = ivec2(gl_WorkGroupID) * GROUP_SIZE - FILTER_RADIUS;
+    vec2 uv = (vec2(baseIdx) + 0.5) * uTexelSize;
+
+    for (int i = int(gl_LocalInvocationIndex); i < TILE_PIXEL_COUNT; i += GROUP_THREAD_COUNT)
+    {
+        vec2 uvOffset = vec2(i % TILE_SIZE, i / TILE_SIZE) * uTexelSize;
+        vec3 currColor = textureLod(uInputTex, uv + uvOffset, uMipLevel).rgb;
+        SetPixel(i, currColor);
+    }
+
+    memoryBarrierShared();
+    barrier();
+    
+    // Center texel
+    uint pixelIdx = (gl_LocalInvocationID.x + FILTER_RADIUS) + (gl_LocalInvocationID.y + FILTER_RADIUS) * TILE_SIZE;
+
+    vec3 A = GetPixel(pixelIdx - TILE_SIZE - 1);
+    vec3 B = GetPixel(pixelIdx - TILE_SIZE    );
+    vec3 C = GetPixel(pixelIdx - TILE_SIZE + 1);
+    vec3 F = GetPixel(pixelIdx - 1            );
+    vec3 G = GetPixel(pixelIdx                );
+    vec3 H = GetPixel(pixelIdx + 1            );
+    vec3 K = GetPixel(pixelIdx + TILE_SIZE - 1);
+    vec3 L = GetPixel(pixelIdx + TILE_SIZE    );
+    vec3 M = GetPixel(pixelIdx + TILE_SIZE + 1);
+
+    vec3 D = (A + B + G + F) * 0.25;
+    vec3 E = (B + C + H + G) * 0.25;
+    vec3 I = (F + G + L + K) * 0.25;
+    vec3 J = (G + H + M + L) * 0.25;
+
+    vec2 div = vec2(0.5, 0.125) / 4.0;
+
+    vec3 finalColor =  KarisAverage((D + E + I + J) * div.x);
+    finalColor += KarisAverage((A + B + G + F) * div.y);
+    finalColor += KarisAverage((B + C + H + G) * div.y);
+    finalColor += KarisAverage((F + G + L + K) * div.y);
+    finalColor += KarisAverage((G + H + M + L) * div.y);
+
+	if (uUseThreshold)
+        finalColor = QuadraticThreshold(finalColor, uThreshold.x, uThreshold.yzw);
+    
+	ivec2 pixelCoords = ivec2(gl_GlobalInvocationID);
+	imageStore(uOutputTex, pixelCoords, vec4(finalColor, 1.0));
+}

@@ -1,0 +1,52 @@
+{
+    "LevelName": "temp",
+    "Path": "temp.json",
+    "Root": [
+        {
+            ".Name": "Unnamed (0)",
+            "Comps": [
+                {
+                    ".Rtti": "ModelRenderer"
+                }
+            ],
+            "transform": {
+                "pos": {
+                    "x": 0.0,
+                    "y": 1.2378634214401245,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            ".Name": "Unnamed (1)",
+            "Comps": [
+                {
+                    ".Rtti": "LightComp",
+                    "color": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    }
+                }
+            ],
+            "transform": {
+                "pos": {
+                    "x": 0.5414165258407593,
+                    "y": 2.3576691150665283,
+                    "z": 1.2589917182922363
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        }
+    ],
+    "Skybox": "data/skybox/Airport.hdr"
+}
